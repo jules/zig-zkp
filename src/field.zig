@@ -39,11 +39,17 @@ pub fn Field(comptime T: type, comptime U: type) type {
                 r = 1 << num_bits_modulus;
             }
 
-            return Field(T, U){
+            var field = Field(T, U){
                 .modulus = modulus,
                 .value = v,
                 .R = r,
             };
+
+            if (v != 0) {
+                // mont mul with R2
+            }
+
+            return field;
         }
 
         pub fn neg(self: Field(T, U)) Field(T, U) {
@@ -90,22 +96,11 @@ pub fn Field(comptime T: type, comptime U: type) type {
         }
 
         pub fn sub(self: Field(T, U), other: Field(T, U)) Field(T, U) {
-            var new_value = self.value + other.neg();
-            if (new_value >= self.modulus) {
-                new_value -= self.modulus;
-            }
-
-            return Field(T, U){
-                .modulus = self.modulus,
-                .value = new_value,
-            };
+            return self.add(other.neg());
         }
 
         pub fn subAssign(self: *Field(T, U), other: Field(T, U)) void {
-            self.value = self.value + other.neg();
-            if (self.value >= self.modulus) {
-                self.value -= self.modulus;
-            }
+            self.addAssign(other.neg());
         }
 
         pub fn mul(self: Field(T, U), other: Field(T, U)) Field(T, U) {
