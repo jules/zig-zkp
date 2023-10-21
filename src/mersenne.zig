@@ -22,7 +22,7 @@ pub fn Mersenne(comptime T: type) type {
             const mul_trunc = 2 << num_bits;
             return Mersenne(T){
                 .modulus = modulus,
-                .value = value,
+                .value = v,
                 .mul_type = mul_type,
                 .num_bits = num_bits,
                 .mul_trunc = mul_trunc,
