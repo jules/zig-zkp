@@ -1,137 +1,138 @@
 const std = @import("std");
 
-/// Implements a backend for a Mersenne prime field.
-pub fn Mersenne(comptime T: type) type {
-    return struct {
-        modulus: T,
-        value: T,
-        mul_bits: u16,
-        num_bits: u16,
-        mul_trunc: T,
+/// Implements the Mersenne-31 prime field.
+pub const M31 = struct {
+    modulus: u64,
+    value: u64,
 
-        /// Creates a new Mersenne backend. The function expects the generic integer type to have
-        /// 1 bit more width than the actual modulus for easy arithmetic implementations.
-        /// XXX: can we enforce this?
-        pub fn new(value: T, modulus: T) Mersenne(T) {
-            var v = value;
-            while (v > modulus) {
-                v -= modulus;
-            }
-
-            var mul_bits = @typeInfo(T).Int.bits;
-            mul_bits *= 2;
-
-            const num_bits = @typeInfo(T).Int.bits - 1;
-            const mul_trunc = (1 << num_bits) - 1;
-            return Mersenne(T){
-                .modulus = modulus,
-                .value = v,
-                .mul_bits = mul_bits,
-                .num_bits = num_bits,
-                .mul_trunc = mul_trunc,
-            };
+    /// XXX: i cant seem to crack it right now but i wonder if we can comptime derive a
+    /// 'multiplication-type' which would allow us to hold values in smaller registers and
+    /// then efficiently create bigger registers for the multiplication results.
+    ///
+    /// as a sidenote, this backend is likely really only useful for M31 so it isn't a huge
+    /// deal, and from what i can see on agner fog's benches there's no slowdown on 32 vs 64
+    /// bit muls.
+    pub fn new(value: u64) M31 {
+        const modulus = 2147483647;
+        var v = value;
+        while (v > modulus) {
+            v -= modulus;
         }
 
-        pub fn neg(self: Mersenne(T)) Mersenne(T) {
-            const new_value = self.modulus - self.value;
+        return M31{
+            .modulus = modulus,
+            .value = v,
+        };
+    }
 
-            return Mersenne(T){
-                .modulus = self.modulus,
-                .value = new_value,
-            };
+    pub fn neg(self: M31) M31 {
+        const new_value = self.modulus - self.value;
+
+        return M31{
+            .modulus = self.modulus,
+            .value = new_value,
+        };
+    }
+
+    pub fn negAssign(self: M31) void {
+        self.value = self.modulus - self.value;
+    }
+
+    /// Compute the inverse with Fermat's Little Theorem.
+    /// Fermat's Little Theorem states that a^(p-1) = 1 mod p,
+    /// therefore, a^(p-2) * a = 1 mod p, or a^(p-2) = a^-1 mod p.
+    /// For M31, we thus need to compute a^2147483646.
+    /// Taken from https://github.com/Plonky3/Plonky3/blob/main/mersenne-31/src/lib.rs#L217.
+    pub fn inverse_flt(self: M31) M31 {
+        var result = self;
+        const a1 = self;
+        // a^101
+        result.mulAssign(result);
+        result.mulAssign(result);
+        result.mulAssign(a1);
+
+        const a1111 = result.square().mul(result);
+        const a11111111 = a1111.square().square().square().square().mul(a1111);
+        const a111111110000 = a11111111.square().square().square().square();
+        const a111111111111 = a111111110000.mul(a1111);
+        const a1111111111111111 = a111111110000.square().square().square().square().mul(a11111111);
+        const a1111111111111111111111111111 = a1111111111111111.square().square().square().square().square().square().square().square().square().square().square().square().mul(a111111111111);
+        result.mulAssign(a1111111111111111111111111111.square().square().square());
+
+        return result;
+    }
+
+    /// Compute the inverse with the Extended Euclidean algorithm.
+    /// Kinda just putting this here cause I'd like to bench it.
+    //pub fn inverse_xgcd(self: M31) M31 void {
+
+    //}
+
+    inline fn addInner(value: *u64, other: u64, modulus: u64) void {
+        value.* += other;
+        if (value.* >= modulus) {
+            value.* -= modulus;
         }
+    }
 
-        pub fn negAssign(self: Mersenne(T)) void {
-            self.value = self.modulus - self.value;
+    pub fn add(self: M31, other: M31) M31 {
+        var new_value = self.value;
+        addInner(&new_value, other.value, self.modulus);
+        return M31{
+            .modulus = self.modulus,
+            .value = new_value,
+        };
+    }
+
+    pub fn addAssign(self: *M31, other: M31) void {
+        addInner(&self.value, other.value, self.modulus);
+    }
+
+    pub fn sub(self: M31, other: M31) M31 {
+        return self.add(other.neg());
+    }
+
+    pub fn subAssign(self: M31, other: M31) void {
+        self.addAssign(other.neg());
+    }
+
+    // https://thomas-plantard.github.io/pdf/Plantard21.pdf, Algorithm 3
+    inline fn mulInner(value: *u64, other: u64, modulus: u64) void {
+        value.* *= other;
+        const result_hi = value.* >> 31;
+        const result_lo = value.* & ((1 << 31) - 1);
+        value.* = result_lo + result_hi;
+        if (value.* > modulus) {
+            value.* -= modulus;
         }
+    }
 
-        /// Compute the inverse with Fermat's Little Theorem.
-        /// Fermat's Little Theorem states that a^(p-1) = 1 mod p,
-        /// therefore, a^(p-2) * a = 1 mod p, or a^(p-2) = a^-1 mod p.
-        //pub fn inverse_flt(self: Mersenne(T)) Mersenne(T) void {
+    pub fn mul(self: M31, other: M31) M31 {
+        var new_value = self.value;
+        mulInner(&new_value, other.value, self.modulus);
+        return M31{
+            .modulus = self.modulus,
+            .value = new_value,
+        };
+    }
 
-        //}
+    pub fn mulAssign(self: *M31, other: M31) void {
+        mulInner(&self.value, other.value, self.modulus);
+    }
 
-        /// Compute the inverse with the Extended Euclidean algorithm.
-        /// Kinda just putting this here cause I'd like to bench it.
-        //pub fn inverse_xgcd(self: Mersenne(T)) Mersenne(T) void {
+    pub fn div(self: M31, other: M31) M31 {
+        var inv_other = other;
+        inv_other.value = inv_other.value.inverse_flt();
+        return self.mul(inv_other);
+    }
 
-        //}
+    pub fn divAssign(self: *M31, other: M31) void {
+        var inv_other = other;
+        inv_other.value = inv_other.value.inverse_flt();
+        self.mulAssign(inv_other);
+    }
 
-        inline fn addInner(value: *T, other: T, modulus: T) void {
-            value.* += other;
-            if (value.* >= modulus) {
-                value.* -= modulus;
-            }
-        }
-
-        pub fn add(self: Mersenne(T), other: Mersenne(T)) Mersenne(T) {
-            var new_value = self.value;
-            addInner(&new_value, other.value, self.modulus);
-            return Mersenne(T){
-                .modulus = self.modulus,
-                .value = new_value,
-                .mul_bits = self.mul_bits,
-                .num_bits = self.num_bits,
-                .mul_trunc = self.mul_trunc,
-            };
-        }
-
-        pub fn addAssign(self: *Mersenne(T), other: Mersenne(T)) void {
-            addInner(&self.value, other.value, self.modulus);
-        }
-
-        pub fn sub(self: Mersenne(T), other: Mersenne(T)) Mersenne(T) {
-            return self.add(other.neg());
-        }
-
-        pub fn subAssign(self: Mersenne(T), other: Mersenne(T)) void {
-            self.addAssign(other.neg());
-        }
-
-        // https://thomas-plantard.github.io/pdf/Plantard21.pdf, Algorithm 3
-        inline fn mulInner(value: *T, other: T, modulus: T, num_bits: u16, mul_trunc: T) void {
-            const t = comptime std.builtin.Type{
-                .Int = std.builtin.Type.Int{
-                    .signedness = std.builtin.Signedness.unsigned,
-                    .bits = @typeInfo(T).Int.bits * 2,
-                },
-            };
-            var result: @Type(t) = @as(@Type(t), value.*) * @as(@Type(t), other);
-            const result_hi: T = @intCast(result >> @truncate(num_bits));
-            const result_lo: T = @truncate(result & mul_trunc);
-            value.* = result_lo + result_hi;
-            if (value.* > modulus) {
-                value.* -= modulus;
-            }
-        }
-
-        pub fn mul(self: Mersenne(T), other: Mersenne(T)) Mersenne(T) {
-            var new_value: T = self.value;
-            mulInner(&new_value, other.value, self.modulus, self.num_bits, self.mul_trunc);
-            return Mersenne(T){
-                .modulus = self.modulus,
-                .value = new_value,
-                .mul_bits = self.mul_bits,
-                .num_bits = self.num_bits,
-                .mul_trunc = self.mul_trunc,
-            };
-        }
-
-        pub fn mulAssign(self: *Mersenne(T), other: Mersenne(T)) void {
-            mulInner(&self.value, other.value, self.modulus, self.num_bits, self.mul_trunc);
-        }
-
-        pub fn div(self: Mersenne(T), other: Mersenne(T)) Mersenne(T) {
-            var inv_other = other;
-            inv_other.value = inv_other.value.inverse_flt();
-            return self.mul(inv_other);
-        }
-
-        pub fn divAssign(self: *Mersenne(T), other: Mersenne(T)) void {
-            var inv_other = other;
-            inv_other.value = inv_other.value.inverse_flt();
-            self.mulAssign(inv_other);
-        }
-    };
-}
+    pub fn square(self: M31) M31 {
+        return self.mul(self);
+    }
+};
