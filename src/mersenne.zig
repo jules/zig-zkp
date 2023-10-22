@@ -5,25 +5,28 @@ pub fn Mersenne(comptime T: type) type {
     return struct {
         modulus: T,
         value: T,
-        mul_type: std.builtin.Type,
-        num_bits: usize,
+        mul_bits: u16,
+        num_bits: u16,
         mul_trunc: T,
 
+        /// Creates a new Mersenne backend. The function expects the generic integer type to have
+        /// 1 bit more width than the actual modulus for easy arithmetic implementations.
+        /// XXX: can we enforce this?
         pub fn new(value: T, modulus: T) Mersenne(T) {
             var v = value;
             while (v > modulus) {
                 v -= modulus;
             }
 
-            var mul_type = @typeInfo(T);
-            mul_type.Int.Bits *= 2;
+            var mul_bits = @typeInfo(T).Int.bits;
+            mul_bits *= 2;
 
-            const num_bits = @typeInfo(T).Int.Bits - 1;
-            const mul_trunc = 2 << num_bits;
+            const num_bits = @typeInfo(T).Int.bits - 1;
+            const mul_trunc = (1 << num_bits) - 1;
             return Mersenne(T){
                 .modulus = modulus,
                 .value = v,
-                .mul_type = mul_type,
+                .mul_bits = mul_bits,
                 .num_bits = num_bits,
                 .mul_trunc = mul_trunc,
             };
@@ -56,9 +59,9 @@ pub fn Mersenne(comptime T: type) type {
         //}
 
         inline fn addInner(value: *T, other: T, modulus: T) void {
-            value += other;
-            if (value >= modulus) {
-                value -= modulus;
+            value.* += other;
+            if (value.* >= modulus) {
+                value.* -= modulus;
             }
         }
 
@@ -68,6 +71,9 @@ pub fn Mersenne(comptime T: type) type {
             return Mersenne(T){
                 .modulus = self.modulus,
                 .value = new_value,
+                .mul_bits = self.mul_bits,
+                .num_bits = self.num_bits,
+                .mul_trunc = self.mul_trunc,
             };
         }
 
@@ -83,31 +89,37 @@ pub fn Mersenne(comptime T: type) type {
             self.addAssign(other.neg());
         }
 
-        inline fn mulInner(value: *T, other: T, modulus: T, mul_type: std.builtin.Type, num_bits: usize, mul_trunc: T) void {
-            var result: T = @Type(mul_type);
-            result = value * other;
-            const result_hi: T = @intCast(result >> num_bits);
-            const result_lo: T = @truncate(result | mul_trunc);
-            value = result_lo + result_hi;
-            if (value > modulus) {
-                value -= modulus;
+        // https://thomas-plantard.github.io/pdf/Plantard21.pdf, Algorithm 3
+        inline fn mulInner(value: *T, other: T, modulus: T, num_bits: u16, mul_trunc: T) void {
+            const t = comptime std.builtin.Type{
+                .Int = std.builtin.Type.Int{
+                    .signedness = std.builtin.Signedness.unsigned,
+                    .bits = @typeInfo(T).Int.bits * 2,
+                },
+            };
+            var result: @Type(t) = @as(@Type(t), value.*) * @as(@Type(t), other);
+            const result_hi: T = @intCast(result >> @truncate(num_bits));
+            const result_lo: T = @truncate(result & mul_trunc);
+            value.* = result_lo + result_hi;
+            if (value.* > modulus) {
+                value.* -= modulus;
             }
         }
 
-        /// https://thomas-plantard.github.io/pdf/Plantard21.pdf, Algorithm 3
         pub fn mul(self: Mersenne(T), other: Mersenne(T)) Mersenne(T) {
             var new_value: T = self.value;
-            mulInner(&new_value, other.value, self.modulus, self.mul_type, self.num_bits, self.mul_trunc);
+            mulInner(&new_value, other.value, self.modulus, self.num_bits, self.mul_trunc);
             return Mersenne(T){
                 .modulus = self.modulus,
                 .value = new_value,
-                .mul_type = self.mul_type,
+                .mul_bits = self.mul_bits,
                 .num_bits = self.num_bits,
+                .mul_trunc = self.mul_trunc,
             };
         }
 
         pub fn mulAssign(self: *Mersenne(T), other: Mersenne(T)) void {
-            mulInner(&self.value, other.value, self.modulus, self.mul_type, self.num_bits, self.mul_trunc);
+            mulInner(&self.value, other.value, self.modulus, self.num_bits, self.mul_trunc);
         }
 
         pub fn div(self: Mersenne(T), other: Mersenne(T)) Mersenne(T) {

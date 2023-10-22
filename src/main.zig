@@ -1,22 +1,16 @@
 const std = @import("std");
-const Field = @import("field.zig").Field;
+const Mersenne = @import("mersenne.zig").Mersenne;
 const testing = std.testing;
 
-pub fn add(a: u32, b: u32) Field(u32) {
-    const a_field = Field(u32){
-        .modulus = 2147483647,
-        .value = a,
-    };
-    const b_field = Field(u32).new(b, 2147483647);
+pub fn add(a: u32, b: u32) Mersenne(u32) {
+    const a_field = Mersenne(u32).new(a, 2147483647);
+    const b_field = Mersenne(u32).new(b, 2147483647);
     return a_field.add(b_field);
 }
 
-pub fn mul(a: u32, b: u32) Field(u32) {
-    const a_field = Field(u32){
-        .modulus = 2147483647,
-        .value = a,
-    };
-    const b_field = Field(u32).new(b, 2147483647);
+pub fn mul(a: u32, b: u32) Mersenne(u32) {
+    const a_field = Mersenne(u32).new(a, 2147483647);
+    const b_field = Mersenne(u32).new(b, 2147483647);
     return a_field.mul(b_field);
 }
 
