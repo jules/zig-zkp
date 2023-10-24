@@ -1,8 +1,9 @@
 const std = @import("std");
 
+const m31_modulus = 2147483647;
+
 /// Implements the Mersenne-31 prime field.
 pub const M31 = struct {
-    modulus: u64,
     value: u64,
 
     /// XXX: i cant seem to crack it right now but i wonder if we can comptime derive a
@@ -13,29 +14,26 @@ pub const M31 = struct {
     /// deal, and from what i can see on agner fog's benches there's no slowdown on 32 vs 64
     /// bit muls.
     pub fn new(value: u64) M31 {
-        const modulus = 2147483647;
         var v = value;
-        while (v > modulus) {
-            v -= modulus;
+        while (v > m31_modulus) {
+            v -= m31_modulus;
         }
 
         return M31{
-            .modulus = modulus,
             .value = v,
         };
     }
 
     pub fn neg(self: M31) M31 {
-        const new_value = self.modulus - self.value;
+        const new_value = m31_modulus - self.value;
 
         return M31{
-            .modulus = self.modulus,
             .value = new_value,
         };
     }
 
     pub fn negAssign(self: M31) void {
-        self.value = self.modulus - self.value;
+        self.value = m31_modulus - self.value;
     }
 
     /// Compute the inverse with Fermat's Little Theorem.
@@ -68,24 +66,23 @@ pub const M31 = struct {
 
     //}
 
-    inline fn addInner(value: *u64, other: u64, modulus: u64) void {
+    inline fn addInner(value: *u64, other: u64) void {
         value.* += other;
-        if (value.* >= modulus) {
-            value.* -= modulus;
+        if (value.* >= m31_modulus) {
+            value.* -= m31_modulus;
         }
     }
 
     pub fn add(self: M31, other: M31) M31 {
         var new_value = self.value;
-        addInner(&new_value, other.value, self.modulus);
+        addInner(&new_value, other.value);
         return M31{
-            .modulus = self.modulus,
             .value = new_value,
         };
     }
 
     pub fn addAssign(self: *M31, other: M31) void {
-        addInner(&self.value, other.value, self.modulus);
+        addInner(&self.value, other.value);
     }
 
     pub fn sub(self: M31, other: M31) M31 {
@@ -97,27 +94,26 @@ pub const M31 = struct {
     }
 
     // https://thomas-plantard.github.io/pdf/Plantard21.pdf, Algorithm 3
-    inline fn mulInner(value: *u64, other: u64, modulus: u64) void {
+    inline fn mulInner(value: *u64, other: u64) void {
         value.* *= other;
         const result_hi = value.* >> 31;
         const result_lo = value.* & ((1 << 31) - 1);
         value.* = result_lo + result_hi;
-        if (value.* > modulus) {
-            value.* -= modulus;
+        if (value.* > m31_modulus) {
+            value.* -= m31_modulus;
         }
     }
 
     pub fn mul(self: M31, other: M31) M31 {
         var new_value = self.value;
-        mulInner(&new_value, other.value, self.modulus);
+        mulInner(&new_value, other.value);
         return M31{
-            .modulus = self.modulus,
             .value = new_value,
         };
     }
 
     pub fn mulAssign(self: *M31, other: M31) void {
-        mulInner(&self.value, other.value, self.modulus);
+        mulInner(&self.value, other.value);
     }
 
     pub fn div(self: M31, other: M31) M31 {
