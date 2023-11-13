@@ -24,6 +24,10 @@ pub const M31 = struct {
         };
     }
 
+    pub fn isZero(self: M31) bool {
+        return self.value == 0;
+    }
+
     pub fn neg(self: M31) M31 {
         const new_value = m31_modulus - self.value;
 
