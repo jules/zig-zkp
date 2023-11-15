@@ -49,9 +49,7 @@ pub const M31 = struct {
         var result = self;
         const a1 = self;
         // a^101
-        result.mulAssign(result);
-        result.mulAssign(result);
-        result.mulAssign(a1);
+        result = result.square().square().mul(a1);
 
         const a1111 = result.square().mul(result);
         const a11111111 = a1111.square().square().square().square().mul(a1111);
