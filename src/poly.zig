@@ -18,7 +18,7 @@ fn QuoRem(comptime T: type) type {
 /// as possible despite this.
 ///
 /// Coefficients are considered to be rising in degree.
-/// XXX: guards for empty polys
+// XXX: guards for empty polys
 pub fn Polynomial(comptime T: type) type {
     return struct {
         elements: ArrayList(T),
@@ -166,6 +166,35 @@ pub fn Polynomial(comptime T: type) type {
             self = quorem.quotient;
         }
 
+        pub fn pow(self: Polynomial(T), exponent: u64, allocator: Allocator) !Polynomial(T) {
+            if (self.isZero()) {
+                var a_list = ArrayList(T).init(allocator);
+                a_list.push(T.new(0));
+                const acc = Polynomial(T).new(a_list);
+                return acc;
+            }
+
+            if (exponent == 0) {
+                var a_list = ArrayList(T).init(allocator);
+                a_list.push(T.new(1));
+                const acc = Polynomial(T).new(a_list);
+                return acc;
+            }
+
+            var a_list = ArrayList(T).init(allocator);
+            a_list.push(T.new(1));
+            var acc = Polynomial(T).new(a_list);
+            for (0..64) |i| {
+                const j = 63 - i;
+                acc.mulAssign(acc);
+                if ((1 << j) & exponent != 0) {
+                    acc.mulAssign(self);
+                }
+            }
+
+            return acc;
+        }
+
         pub fn eval(self: Polynomial(T), point: T) T {
             var result = self.elements[0];
             const base_point = point;
@@ -176,13 +205,19 @@ pub fn Polynomial(comptime T: type) type {
             }
         }
 
+        pub fn leadingCoefficient(self: Polynomial(T)) T {
+            return self.elements[self.degree()];
+        }
+
         // Simple iterative method
-        // NOTE: should be updated to use FFT at some point
+        // NOTE: should be updated to use cooley tukey FFT at some point
         pub fn interpolate(domain: []T, values: []T, allocator: Allocator) Polynomial(T) {
             var x_list = ArrayList(T).init(allocator);
             x_list.push(T.new(0));
             x_list.push(T.new(1));
             const x = Polynomial(T).new(x_list);
+            defer x.deinit();
+
             var acc = Polynomial(T).new(ArrayList(T).init(allocator));
             for (0.., domain) |i, _| {
                 var product_list = ArrayList(T).init(allocator);
@@ -203,16 +238,62 @@ pub fn Polynomial(comptime T: type) type {
                     var b = Polynomial(T).new(b_list);
                     b.negAssign();
                     product.mulAssign(x.sub(a).mul(b));
+
+                    a.deinit();
+                    b.deinit();
                 }
 
                 acc.addAssign(product);
+                product.deinit();
             }
 
             return acc;
         }
 
-        pub fn leadingCoefficient(self: Polynomial(T)) T {
-            return self.elements[self.degree()];
+        pub fn zerofierDomain(domain: []T, allocator: Allocator) Polynomial(T) {
+            var a_list = ArrayList(T).init(allocator);
+            a_list.push(T.new(0), T.new(1));
+            const x = Polynomial(T).new(a_list);
+            defer x.deinit();
+
+            var b_list = ArrayList(T).init(allocator);
+            b_list.push(T.new(1));
+            var acc = Polynomial(T).new(b_list);
+
+            for (0.., domain) |i, _| {
+                var c_list = ArrayList(T).init(allocator);
+                c_list.push(T.new(i));
+                const c = Polynomial(T).new(c_list);
+                const t = x.sub(c);
+                acc.mulAssign(t);
+                c.deinit();
+            }
+
+            return acc;
+        }
+
+        pub fn scale(self: *Polynomial(T), factor: T) void {
+            var f = T.new(1);
+            for (&self.elements) |*el| {
+                el.*.mulAssign(f);
+                f.mulAssign(factor);
+            }
+        }
+
+        pub fn testColinearity(points: [3][2]T, allocator: Allocator) bool {
+            var domain: [3]T = undefined;
+            for (0.., points) |i, p| {
+                domain[i] = p[0];
+            }
+
+            var values: [3]T = undefined;
+            for (0.., points) |i, p| {
+                values[i] = p[1];
+            }
+
+            const p = interpolate(domain, values, allocator);
+            defer p.deinit();
+            return p.degree() <= 1;
         }
 
         pub fn deinit(self: Polynomial(T)) void {
