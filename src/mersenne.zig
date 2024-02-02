@@ -37,8 +37,8 @@ pub const M31 = struct {
         };
     }
 
-    pub fn negAssign(self: M31) void {
-        self.value = m31_modulus - self.value;
+    pub fn negAssign(self: *M31) void {
+        self.*.value = m31_modulus - self.value;
     }
 
     /// Compute the inverse with Fermat's Little Theorem.
