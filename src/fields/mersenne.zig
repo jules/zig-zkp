@@ -1,5 +1,6 @@
 const std = @import("std");
 
+// 2^31 - 1
 const m31_modulus = 2147483647;
 
 /// Implements the Mersenne-31 prime field.
@@ -134,3 +135,21 @@ pub const M31 = struct {
         return self.mul(self);
     }
 };
+
+const testing = std.testing;
+const add = @import("testing.zig").add;
+const mul = @import("testing.zig").mul;
+const invert = @import("testing.zig").invert;
+
+test "basic add functionality" {
+    try testing.expect(add(2147483646, 2147483646).value == 2147483645);
+    try testing.expect(add(2147483646, 1).value == 0);
+}
+
+test "mul by 2" {
+    try testing.expect(mul(2147483646, 2).value == 2147483645);
+}
+
+test "inverse" {
+    try testing.expect(invert(137489124).value == 1);
+}

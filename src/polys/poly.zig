@@ -64,8 +64,12 @@ pub fn Polynomial(comptime T: type) type {
                 value.elements.extend(m - value.elements.length());
             }
 
+            if (m > other.elements.length()) {
+                other.elements.extend(m - other.elements.length());
+            }
+
             for (0.., value.elements, other.elements) |i, v1, v2| {
-                value[i] = v1.add(v2);
+                value.elements.insert(i, v1.add(v2));
             }
         }
 
@@ -106,7 +110,7 @@ pub fn Polynomial(comptime T: type) type {
                 }
 
                 for (0.., other.elements) |j, v2| {
-                    result.elements[i + j].addAssign(v1.mul(v2));
+                    result.elements.items[i + j].addAssign(v1.mul(v2));
                 }
             }
 
@@ -150,7 +154,7 @@ pub fn Polynomial(comptime T: type) type {
                 const subtractee = Polynomial(T).new(sub_list);
                 defer subtractee.deinit();
 
-                quotient.elements[shift] = coeff;
+                quotient.elements.items[shift] = coeff;
                 remainder.subAssign(subtractee);
             }
 
@@ -196,7 +200,7 @@ pub fn Polynomial(comptime T: type) type {
         }
 
         pub fn eval(self: Polynomial(T), point: T) T {
-            var result = self.elements[0];
+            var result = self.elements.items[0];
             const base_point = point;
 
             for (self.elements) |v| {
@@ -206,7 +210,7 @@ pub fn Polynomial(comptime T: type) type {
         }
 
         pub fn leadingCoefficient(self: Polynomial(T)) T {
-            return self.elements[self.degree()];
+            return self.elements.items[self.degree()];
         }
 
         // Simple iterative method
@@ -295,6 +299,8 @@ pub fn Polynomial(comptime T: type) type {
             defer p.deinit();
             return p.degree() <= 1;
         }
+
+        // TODO: pow
 
         pub fn deinit(self: Polynomial(T)) void {
             self.elements.deinit();
