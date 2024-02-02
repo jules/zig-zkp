@@ -107,23 +107,30 @@ pub fn MVPolynomial(comptime T: type) type {
         }
 
         inline fn mulInner(self: MVPolynomial(T), other: MVPolynomial(T), allocator: Allocator) MVPolynomial(T) {
-            const max_vars = @max(self.num_vars, other.num_vars);
-            var map = ArrayHashMap([]u64, T).init(allocator);
+            const l = @max(self.num_vars, other.num_vars);
+            var map = ArrayHashMap(ArrayList(u64), T).init(allocator);
 
-            for (self.keys) |k| {
-                for (other.keys) |j| {
-                    var exponent: [max_vars]u64 = 0 ** max_vars;
-                    for (0.., k) |i, e| {
-                        exponent[i] = e;
-                    }
-                    for (0.., j) |i, e| {
-                        exponent[i] = exponent[i] + e;
+            for (self.elements.keys()) |k| {
+                for (other.elements.keys()) |j| {
+                    var arr = ArrayList(u64).init(allocator);
+                    for (k.items) |e| {
+                        arr.append(e) catch unreachable;
                     }
 
-                    const m = self.elements.get(k).mul(other.elements.get(j));
-                    var result = map.getOrPut(exponent, m);
+                    while (arr.items.len < l) {
+                        arr.append(0) catch unreachable;
+                    }
+
+                    for (0.., j.items) |i, e| {
+                        arr.items[i] = arr.items[i] + e;
+                    }
+
+                    const m = self.elements.get(k).?.mul(other.elements.get(j).?);
+                    const result = map.getOrPut(arr) catch unreachable;
                     if (result.found_existing) {
-                        result.value_ptr.* = result.value_ptr.* + m;
+                        result.value_ptr.*.addAssign(m);
+                    } else {
+                        result.value_ptr.* = m;
                     }
                 }
             }
@@ -131,7 +138,7 @@ pub fn MVPolynomial(comptime T: type) type {
             return MVPolynomial(T).new(map) catch unreachable;
         }
 
-        pub fn mul(self: MVPolynomial(T), other: MVPolynomial(T), allocator: Allocator) MVPolynomial(type, T) {
+        pub fn mul(self: MVPolynomial(T), other: MVPolynomial(T), allocator: Allocator) MVPolynomial(T) {
             return mulInner(self, other, allocator);
         }
 
@@ -185,4 +192,6 @@ test "init" {
     defer result.deinit();
     var result2 = constant.sub(p, test_allocator);
     defer result2.deinit();
+    var result3 = constant.mul(p, test_allocator);
+    defer result3.deinit();
 }
