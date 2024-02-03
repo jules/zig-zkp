@@ -134,6 +134,15 @@ pub const M31 = struct {
     pub fn square(self: M31) M31 {
         return self.mul(self);
     }
+
+    pub fn pow(self: M31, exponent: u64) M31 {
+        var result = M31.new(1);
+        for (0..exponent) |_| {
+            result.mulAssign(self);
+        }
+
+        return result;
+    }
 };
 
 const testing = std.testing;

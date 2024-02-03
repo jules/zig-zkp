@@ -2,9 +2,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const ArrayHashMap = std.AutoArrayHashMap;
+const Polynomial = @import("poly.zig").Polynomial;
 
 const MVPolynomialError = error{
     VariableSizeMismatch,
+    PointLengthMismatch,
 };
 
 pub fn MVPolynomial(comptime T: type) type {
@@ -171,7 +173,51 @@ pub fn MVPolynomial(comptime T: type) type {
             return MVPolynomial(T).new(map) catch unreachable;
         }
 
-        // TODO: lift, eval, symbolic eval
+        pub fn eval(self: MVPolynomial(T), points: []T) !T {
+            if (points.len != self.num_vars) {
+                return MVPolynomialError.PointLengthMismatch;
+            }
+
+            var acc = T.new(0);
+
+            for (self.elements.keys()) |k| {
+                var tmp = self.elements.get(k).?;
+                for (0..k.items.len) |i| {
+                    tmp.mulAssign(points[i].pow(k[i]));
+                }
+
+                acc.addAssign(tmp);
+            }
+
+            return acc;
+        }
+
+        pub fn symbolicEval(self: MVPolynomial(T), points: []Polynomial(T), allocator: Allocator) !Polynomial(T) {
+            if (points.len != self.num_vars) {
+                return MVPolynomialError.PointLengthMismatch;
+            }
+
+            var list = ArrayList(T).init(allocator);
+            var acc = Polynomial(T).new(list);
+
+            for (self.elements.keys()) |k| {
+                var el = self.elements.get(k).?;
+                var tmp_list = ArrayList(T).init(allocator);
+                tmp_list.append(el) catch unreachable;
+                var tmp = Polynomial(T).new(tmp_list);
+                defer tmp.deinit();
+
+                for (0..k.items.len) |i| {
+                    var prod = points[i].pow(k[i], allocator);
+                    defer prod.deinit();
+                    tmp.mulAssign(prod, allocator);
+                }
+
+                acc.addAssign(tmp);
+            }
+
+            return acc;
+        }
 
         pub fn deinit(self: *MVPolynomial(T)) void {
             self.elements.deinit();

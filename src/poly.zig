@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const ArrayHashMap = std.AutoArrayHashMap;
+const MVPolynomial = @import("mvpoly.zig").MVPolynomial;
 
 const PolynomialError = error{
     NoQuotientValue,
@@ -300,7 +302,28 @@ pub fn Polynomial(comptime T: type) type {
             return p.degree() <= 1;
         }
 
-        // TODO: pow
+        pub fn lift(self: Polynomial(T), index: u64, allocator: Allocator) MVPolynomial(T) {
+            if (self.isZero()) {
+                return MVPolynomial(T).newZero(allocator);
+            }
+
+            var list = ArrayList(T).init(allocator);
+            for (0..index) |_| {
+                list.append(0) catch unreachable;
+            }
+            list.append(1) catch unreachable;
+
+            var map = ArrayHashMap(ArrayList(u64), T).init(allocator);
+            map.put(list, T.new(1)) catch unreachable;
+            var x = MVPolynomial(T).new(map) catch unreachable;
+            defer x.deinit();
+            var acc = MVPolynomial(T).newZero(allocator);
+
+            for (0.., self.elements.items) |i, coeff| {
+                acc = acc.add(MVPolynomial(T).constant(coeff, allocator).mul(x.pow(i)));
+            }
+            return acc;
+        }
 
         pub fn deinit(self: Polynomial(T)) void {
             self.elements.deinit();
