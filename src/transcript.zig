@@ -38,7 +38,7 @@ pub fn Transcript(comptime T: type) type {
             defer bytes.deinit();
             for (self.objects.items) |obj| {
                 const b = std.mem.asBytes(obj.value);
-                bytes.extend(b);
+                bytes.extend(b) catch unreachable;
             }
 
             Shake256.hash(bytes.items, out, struct {});
@@ -53,7 +53,7 @@ pub fn Transcript(comptime T: type) type {
                 }
 
                 const b = std.mem.asBytes(obj.value);
-                bytes.extend(b);
+                bytes.extend(b) catch unreachable;
             }
 
             Shake256.hash(bytes.items, out, struct {});
