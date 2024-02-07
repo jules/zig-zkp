@@ -70,7 +70,7 @@ pub fn open(index: usize, leaves: anytype, out: *[32]u8, allocator: Allocator) !
         const len_hashes_over_two = hashes.items.len / 2;
         var commit_out: [32]u8 = undefined;
         if (index < (len_hashes_over_two)) {
-            commit_internal(hashes.items[len_hashes_over_two .. hashes.len - 1], &commit_out, allocator);
+            commit_internal(hashes.items[len_hashes_over_two..hashes.len], &commit_out, allocator);
             var hashes_slice = hashes.toOwnedSlice() catch unreachable;
             hashes_slice = hashes_slice[0..len_hashes_over_two] ++ commit_out;
             hashes = ArrayList([32]u8).fromOwnedSlice(allocator, hashes_slice);
@@ -78,7 +78,7 @@ pub fn open(index: usize, leaves: anytype, out: *[32]u8, allocator: Allocator) !
             index = index - len_hashes_over_two;
             commit_internal(hashes.items[0..len_hashes_over_two], &commit_out, allocator);
             var hashes_slice = hashes.toOwnedSlice() catch unreachable;
-            hashes_slice = hashes_slice[len_hashes_over_two .. hashes.len - 1] ++ commit_out;
+            hashes_slice = hashes_slice[len_hashes_over_two..hashes.len] ++ commit_out;
             hashes = ArrayList([32]u8).fromOwnedSlice(allocator, hashes_slice);
         }
     }
@@ -105,7 +105,7 @@ pub fn verify(root: [32]u8, index: usize, path: [][32]u8, leaf: anytype) !bool {
 
         Blake2b.hash(input, &leaf_hash, struct {});
         index = index >> 1;
-        path = path[1 .. path.len - 1];
+        path = path[1..path.len];
     }
 
     if (index == 0) {
